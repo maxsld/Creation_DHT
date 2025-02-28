@@ -8,7 +8,7 @@ class Node:
         self.left = self  # Initialement seul dans l'anneau
         self.right = self
         self.env.process(self.run())
-    
+
     def __repr__(self):
         return f"Node({self.identifier})"
     
@@ -16,91 +16,86 @@ class Node:
         while True:
             yield self.env.timeout(1)  # Simulation d'une action périodique
     
-    def send_message(self, target_id, message):
-        self.env.process(self.forward_message(target_id, message))
-        yield self.env.timeout(0)
-    
-    def forward_message(self, target_id, message):
+    def insert(self, new_node):
+        """Insère un nouveau nœud dans l'anneau en respectant l'ordre."""
         current = self
-        clockwise_distance = (target_id - current.identifier) % 100
-        counterclockwise_distance = (current.identifier - target_id) % 100
-        direction = "right" if clockwise_distance <= counterclockwise_distance else "left"
-        
-        while current.identifier != target_id:
-            print(f"[{self.env.now}] Message transféré par {current.identifier}")
-            current = current.right if direction == "right" else current.left
-            yield self.env.timeout(1)  # Simulation du délai de transmission
-        
-        print(f"[{self.env.now}] Message reçu par {current.identifier}: {message}")
 
-class DHT:
-    def __init__(self, env):
-        self.env = env
-        self.nodes = []
+        # Cas particulier : si le nouvel identifiant est le plus petit ou le plus grand
+        if new_node.identifier < current.identifier:
+            while current.right != self and current.right.identifier > current.identifier:
+                current = current.right
+
+        # Parcours pour trouver la bonne position
+        while current.right != self and current.right.identifier < new_node.identifier:
+            current = current.right
+
+        # Insertion du nouveau nœud
+        new_node.right = current.right
+        new_node.left = current
+        current.right.left = new_node
+        current.right = new_node
+        print(f"[{self.env.now}] Nœud {new_node.identifier} ajouté entre {current.identifier} et {new_node.right.identifier}")
     
-    def insert(self, identifier):
-        new_node = Node(self.env, identifier)
-        print(f"[{self.env.now}] Nœud {identifier} ajouté")
-        if not self.nodes:
-            self.nodes.append(new_node)
-        else:
-            for i, node in enumerate(self.nodes):
-                if identifier < node.identifier:
-                    self.nodes.insert(i, new_node)
-                    break
-            else:
-                self.nodes.append(new_node)
-            
-            for i in range(len(self.nodes)):
-                self.nodes[i].left = self.nodes[i-1]
-                self.nodes[i].right = self.nodes[(i+1) % len(self.nodes)]
-    
-    def remove(self, identifier):
-        node_to_remove = next((node for node in self.nodes if node.identifier == identifier), None)
-        if node_to_remove:
-            left_node = node_to_remove.left
-            right_node = node_to_remove.right
-            left_node.right = right_node
-            right_node.left = left_node
-            self.nodes.remove(node_to_remove)
-            print(f"Nœud {identifier} supprimé")
+    def remove(self):
+        """Supprime le nœud de l'anneau."""
+        if self.right == self:
+            print(f"[{self.env.now}] Dernier nœud {self.identifier} supprimé, anneau vide.")
+            return None
+        
+        self.left.right = self.right
+        self.right.left = self.left
+        print(f"[{self.env.now}] Nœud {self.identifier} supprimé")
+        return self.right
     
     def display_ring(self):
-        if not self.nodes:
-            print("DHT vide")
-            return
-        
-        start = self.nodes[0]
-        current = start
-
-        print("DHT Ring:")
-        while True:
-            print(f"[{current.identifier}] -> ", end="")
+        """Affiche la structure de l'anneau en commençant par le plus petit identifiant."""
+        # Trouver le nœud avec l'identifiant le plus petit
+        current = self
+        while current.right != self and current.right.identifier > current.identifier:
             current = current.right
-            if current == start:
+        smallest = current.right if current.right.identifier < current.identifier else self
+
+        # Parcourir et afficher l'anneau en commençant par le plus petit
+        nodes = []
+        current = smallest
+        while True:
+            nodes.append(str(current.identifier))
+            current = current.right
+            if current == smallest:
                 break
-        print("...")
+
+        print("DHT Ring: " + " -> ".join(nodes))
 
 # Simulation
 env = simpy.Environment()
-dht = DHT(env)
+bootstrap_node = Node(env, 50)
 
-# Processus pour ajouter des nœuds dynamiquement
-def add_nodes(env, dht, count):
-    for _ in range(count):
-        dht.insert(random.randint(1, 100))
-        yield env.timeout(2)  # Attente entre chaque insertion
+def add_node(env, bootstrap_node):
+    """Ajoute un nœud aléatoire au réseau après un certain temps."""
+    yield env.timeout(0)
+    new_node = Node(env, random.randint(1, 100))
+    bootstrap_node.insert(new_node)
 
-env.process(add_nodes(env, dht, 2))
+env.process(add_node(env, bootstrap_node))
+env.run(until=1)
+env.process(add_node(env, bootstrap_node))
+env.run(until=2)
+env.process(add_node(env, bootstrap_node))
+env.run(until=3)
+env.process(add_node(env, bootstrap_node))
+env.run(until=4)
+env.process(add_node(env, bootstrap_node))
+env.run(until=5)
+env.process(add_node(env, bootstrap_node))
+env.run(until=6)
+env.process(add_node(env, bootstrap_node))
+env.run(until=7)
+env.process(add_node(env, bootstrap_node))
+env.run(until=8)
+env.process(add_node(env, bootstrap_node))
+env.run(until=9)
+env.process(add_node(env, bootstrap_node))
 env.run(until=10)
 
-dht.display_ring()
-
-# Exécution de la simulation
-env.process(dht.nodes[0].send_message(dht.nodes[1].identifier, "Hello, Word!"))
-env.run(20)
-
-env.process(add_nodes(env, dht, 1))
-env.run(until=30)
-
-dht.display_ring()
+# Affichage après l'ajout des nœuds
+bootstrap_node.display_ring()
