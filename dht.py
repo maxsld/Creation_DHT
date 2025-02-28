@@ -69,33 +69,30 @@ class Node:
 # Simulation
 env = simpy.Environment()
 bootstrap_node = Node(env, 50)
+nodes = [bootstrap_node]  # Liste pour suivre les nœuds
 
-def add_node(env, bootstrap_node):
+def add_node(env, bootstrap_node, nodes):
     """Ajoute un nœud aléatoire au réseau après un certain temps."""
-    yield env.timeout(0)
+    yield env.timeout(random.randint(1, 5))  # Chaque ajout a un délai aléatoire
     new_node = Node(env, random.randint(1, 100))
     bootstrap_node.insert(new_node)
+    nodes.append(new_node)
 
-env.process(add_node(env, bootstrap_node))
-env.run(until=1)
-env.process(add_node(env, bootstrap_node))
-env.run(until=2)
-env.process(add_node(env, bootstrap_node))
-env.run(until=3)
-env.process(add_node(env, bootstrap_node))
-env.run(until=4)
-env.process(add_node(env, bootstrap_node))
-env.run(until=5)
-env.process(add_node(env, bootstrap_node))
-env.run(until=6)
-env.process(add_node(env, bootstrap_node))
-env.run(until=7)
-env.process(add_node(env, bootstrap_node))
-env.run(until=8)
-env.process(add_node(env, bootstrap_node))
-env.run(until=9)
-env.process(add_node(env, bootstrap_node))
+# Ajouter plusieurs nœuds
+for _ in range(5):
+    env.process(add_node(env, bootstrap_node, nodes))
+
+# Exécuter la simulation une seule fois sur une durée suffisante
 env.run(until=10)
 
 # Affichage après l'ajout des nœuds
 bootstrap_node.display_ring()
+
+# Supprimer un nœud spécifique
+if len(nodes) > 2:
+    node_to_remove = nodes[2]  # On choisit arbitrairement le 3e nœud ajouté
+    next_node = node_to_remove.remove()
+
+    # Affichage après suppression
+    if next_node:
+        next_node.display_ring()
