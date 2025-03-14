@@ -3,27 +3,42 @@ import random
 
 class Node:
     existing_ids = set()
-    
+
     def __init__(self, env, identifier):
         if identifier in Node.existing_ids:
             raise ValueError(f"Nœud avec l'identifiant {identifier} existe déjà!")
         Node.existing_ids.add(identifier)
-        
+
         self.env = env
         self.identifier = identifier
         self.left = self  # Initialement seul dans l'anneau
         self.right = self
-        self.data = {}  # Stockage clé-valeur pour la DHT
-        
+        self.neighbors = []  # Liste pour stocker les voisins avec lesquels échanger des messages
+
         self.env.process(self.run())
-    
+
     def __repr__(self):
         return f"Node({self.identifier})"
-    
+
     def run(self):
         while True:
-            yield self.env.timeout(1)
-    
+            yield self.env.timeout(1)  # Le nœud est en pause dans l'anneau
+
+    def send_message(self, recipient, message):
+        print(f"[{self.env.now}] {self.identifier} envoie le message '{message}' à {recipient.identifier}")
+        recipient.receive_message(self, message)
+
+    def receive_message(self, sender, message):
+        print(f"[{self.env.now}] {self.identifier} a reçu le message '{message}' de {sender.identifier}")
+        if message == "nouveau nœud":
+            self.insert_new_node(sender)
+
+    def insert_new_node(self, new_node):
+        print(f"[{self.env.now}] Le nœud {self.identifier} reçoit le message 'nouveau nœud' et va l'insérer.")
+        position = self.find_position(new_node)
+        self.send_message(position, "nouveau nœud - insérer")
+        position.insert(new_node)
+
     def find_position(self, new_node):
         current = self
         while not (current.identifier < new_node.identifier <= current.right.identifier or (current.right.identifier < current.identifier and (new_node.identifier > current.identifier or new_node.identifier < current.right.identifier))):
@@ -31,7 +46,7 @@ class Node:
             if current == self:
                 break
         return current
-    
+
     def insert(self, new_node):
         position = self.find_position(new_node)
         new_node.right = position.right
@@ -39,43 +54,14 @@ class Node:
         position.right.left = new_node
         position.right = new_node
         print(f"[{self.env.now}] Nœud {new_node.identifier} ajouté entre {position.identifier} et {new_node.right.identifier}")
-    
-    def remove(self):
-        if self.right == self:
-            print(f"[{self.env.now}] Dernier nœud {self.identifier} supprimé, anneau vide.")
-            Node.existing_ids.remove(self.identifier)
-            return None
-        
-        self.left.right = self.right
-        self.right.left = self.left
-        
-        # Transférer les données au nœud suivant
-        for key, value in self.data.items():
-            self.right.store(key, value)
-        
-        Node.existing_ids.remove(self.identifier)
-        print(f"[{self.env.now}] Nœud {self.identifier} supprimé, données transférées à {self.right.identifier}")
-        return self.right
-    
-    def store(self, key, value):
-        responsible = self.find_successor(key)
-        responsible.data[key] = value
-        print(f"[{self.env.now}] Clé {key} stockée sur le nœud {responsible.identifier}")
-    
-    def find_successor(self, key):
-        current = self
-        while not (current.identifier <= key < current.right.identifier or (current.right.identifier < current.identifier and (key > current.identifier or key < current.right.identifier))):
-            current = current.right
-            if current == self:
-                break
-        return current.right
-    
-    def lookup(self, env, key):
-        yield env.timeout(random.randint(1, 3))
-        responsible = self.find_successor(key)
-        result = responsible.data.get(key, None)
-        print(f"[{env.now}] Recherche clé {key}: {result}")
-    
+
+    def connect_neighbors(self, left_neighbor, right_neighbor):
+        self.left = left_neighbor
+        self.right = right_neighbor
+        left_neighbor.right = self
+        right_neighbor.left = self
+        print(f"[{self.env.now}] Nœud {self.identifier} connecté entre {left_neighbor.identifier} et {right_neighbor.identifier}")
+
     def display_ring(self):
         current = self
         smallest = self
@@ -85,7 +71,7 @@ class Node:
             current = current.right
             if current == self:
                 break
-        
+
         start = smallest
         nodes = []
         current = start
@@ -106,10 +92,14 @@ def add_node(env, nodes):
         new_id = random.randint(1, 100)
         if new_id not in Node.existing_ids:
             break
-    
+
     new_node = Node(env, new_id)
     if nodes:
-        nodes[0].insert(new_node)
+        # Choisir un nœud au hasard dans la liste existante pour que le nouveau nœud contacte
+        random_node = random.choice(nodes)
+        print(f"[{env.now}] Nouveau nœud {new_node.identifier} tente de rejoindre l'anneau.")
+        # Le nouveau nœud envoie un message pour rejoindre l'anneau
+        new_node.send_message(random_node, "nouveau nœud")
     nodes.append(new_node)
     nodes.sort(key=lambda node: node.identifier)
 
@@ -122,29 +112,26 @@ def remove_node(env, nodes, index):
         if next_node:
             next_node.display_ring()
 
-def store_key(env, nodes, key, value):
+def connect_neighbors_after_removal(env, nodes, index):
     yield env.timeout(random.randint(1, 5))
-    if nodes:
-        nodes[0].store(key, value)
+    if len(nodes) > index:
+        node_to_remove = nodes[index]
+        if node_to_remove.left != node_to_remove and node_to_remove.right != node_to_remove:
+            left_neighbor = node_to_remove.left
+            right_neighbor = node_to_remove.right
+            node_to_remove.connect_neighbors(left_neighbor, right_neighbor)
 
-def lookup_key(env, nodes, key):
-    yield env.timeout(random.randint(1, 5))
-    if nodes:
-        env.process(nodes[0].lookup(env, key))
-
-for _ in range(5):
+# Initialisation
+for _ in range(2):
     env.process(add_node(env, nodes))
 
 env.run(until=10)
 
 if nodes:
     nodes[0].display_ring()
-    env.process(store_key(env, nodes, 42, "Donnée Importante"))
-    env.process(lookup_key(env, nodes, 42))
+    env.process(add_node(env, nodes))
 
 env.run(until=15)
 
-if len(nodes) > 2:
-    env.process(remove_node(env, nodes, 2))
 
 env.run(until=20)
