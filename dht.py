@@ -5,7 +5,7 @@ class Node:
     def __init__(self, env, identifier):
         self.env = env
         self.identifier = identifier
-        self.left = self  # Initialement seul dans l'anneau
+        self.left = self  # Au départ, seul dans l'anneau
         self.right = self
         self.env.process(self.run())
 
@@ -16,25 +16,24 @@ class Node:
         while True:
             yield self.env.timeout(1)  # Simulation d'une action périodique
     
-    def insert(self, new_node):
-        """Insère un nouveau nœud dans l'anneau en respectant l'ordre."""
+    def find_position(self, new_node):
+        """Recherche récursive de la position correcte pour insérer un nouveau nœud."""
         current = self
-
-        # Cas particulier : si le nouvel identifiant est le plus petit ou le plus grand
-        if new_node.identifier < current.identifier:
-            while current.right != self and current.right.identifier > current.identifier:
-                current = current.right
-
-        # Parcours pour trouver la bonne position
-        while current.right != self and current.right.identifier < new_node.identifier:
+        while True:
+            if current.identifier < new_node.identifier < current.right.identifier or (current.right == self and new_node.identifier > current.identifier):
+                return current
             current = current.right
-
-        # Insertion du nouveau nœud
-        new_node.right = current.right
-        new_node.left = current
-        current.right.left = new_node
-        current.right = new_node
-        print(f"[{self.env.now}] Nœud {new_node.identifier} ajouté entre {current.identifier} et {new_node.right.identifier}")
+            if current == self:
+                return current  # Retourne à lui-même en cas de boucle
+    
+    def insert(self, new_node):
+        """Ajoute un nœud après avoir trouvé la bonne position en interrogeant les voisins."""
+        position = self.find_position(new_node)
+        new_node.right = position.right
+        new_node.left = position
+        position.right.left = new_node
+        position.right = new_node
+        print(f"[{self.env.now}] Nœud {new_node.identifier} ajouté entre {position.identifier} et {new_node.right.identifier}")
     
     def remove(self):
         """Supprime le nœud de l'anneau."""
@@ -48,32 +47,28 @@ class Node:
         return self.right
     
     def display_ring(self):
-        """Affiche la structure de l'anneau en commençant par le plus petit identifiant."""
-        # Trouver le nœud avec l'identifiant le plus petit
+        """Affiche l'anneau en se déplaçant à travers les voisins."""
         current = self
-        while current.right != self and current.right.identifier > current.identifier:
-            current = current.right
-        smallest = current.right if current.right.identifier < current.identifier else self
-
-        # Parcourir et afficher l'anneau en commençant par le plus petit
+        while current.left.identifier < current.identifier:
+            current = current.left
+        
+        start = current
         nodes = []
-        current = smallest
         while True:
             nodes.append(str(current.identifier))
             current = current.right
-            if current == smallest:
+            if current == start:
                 break
-
         print("DHT Ring: " + " -> ".join(nodes))
 
 # Simulation
 env = simpy.Environment()
 bootstrap_node = Node(env, 50)
-nodes = [bootstrap_node]  # Liste pour suivre les nœuds
+nodes = [bootstrap_node]
 
 def add_node(env, bootstrap_node, nodes):
-    """Ajoute un nœud aléatoire au réseau après un certain temps."""
-    yield env.timeout(random.randint(1, 5))  # Chaque ajout a un délai aléatoire
+    """Ajoute un nœud après interrogation des voisins."""
+    yield env.timeout(random.randint(1, 5))
     new_node = Node(env, random.randint(1, 100))
     bootstrap_node.insert(new_node)
     nodes.append(new_node)
@@ -82,17 +77,16 @@ def add_node(env, bootstrap_node, nodes):
 for _ in range(5):
     env.process(add_node(env, bootstrap_node, nodes))
 
-# Exécuter la simulation une seule fois sur une durée suffisante
+# Exécuter la simulation
 env.run(until=10)
 
-# Affichage après l'ajout des nœuds
-bootstrap_node.display_ring()
+# Affichage de l'anneau après l'ajout
+temp_node = bootstrap_node
+temp_node.display_ring()
 
-# Supprimer un nœud spécifique
+# Suppression d'un nœud
 if len(nodes) > 2:
-    node_to_remove = nodes[2]  # On choisit arbitrairement le 3e nœud ajouté
+    node_to_remove = nodes[2]
     next_node = node_to_remove.remove()
-
-    # Affichage après suppression
     if next_node:
         next_node.display_ring()
