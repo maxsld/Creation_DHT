@@ -2,7 +2,13 @@ import simpy
 import random
 
 class Node:
+    existing_ids = set()
+
     def __init__(self, env, identifier):
+        if identifier in Node.existing_ids:
+            raise ValueError(f"Nœud avec l'identifiant {identifier} existe déjà!")
+        Node.existing_ids.add(identifier)
+        
         self.env = env
         self.identifier = identifier
         self.left = self  # Au départ, seul dans l'anneau
@@ -39,10 +45,12 @@ class Node:
         """Supprime le nœud de l'anneau."""
         if self.right == self:
             print(f"[{self.env.now}] Dernier nœud {self.identifier} supprimé, anneau vide.")
+            Node.existing_ids.remove(self.identifier)
             return None
         
         self.left.right = self.right
         self.right.left = self.left
+        Node.existing_ids.remove(self.identifier)
         print(f"[{self.env.now}] Nœud {self.identifier} supprimé")
         return self.right
     
@@ -63,26 +71,31 @@ class Node:
 
 # Simulation
 env = simpy.Environment()
-bootstrap_node = Node(env, 50)
-nodes = [bootstrap_node]
+nodes = []
 
-def add_node(env, bootstrap_node, nodes):
-    """Ajoute un nœud après interrogation des voisins."""
+def add_node(env, nodes):
+    """Ajoute un nœud après interrogation des voisins, en évitant les doublons."""
     yield env.timeout(random.randint(1, 5))
-    new_node = Node(env, random.randint(1, 100))
-    bootstrap_node.insert(new_node)
+    while True:
+        new_id = random.randint(1, 100)
+        if new_id not in Node.existing_ids:
+            break
+    
+    new_node = Node(env, new_id)
+    if nodes:
+        nodes[0].insert(new_node)
     nodes.append(new_node)
 
 # Ajouter plusieurs nœuds
-for _ in range(5):
-    env.process(add_node(env, bootstrap_node, nodes))
+for _ in range(6):  # Crée le premier nœud de manière aléatoire
+    env.process(add_node(env, nodes))
 
 # Exécuter la simulation
 env.run(until=10)
 
 # Affichage de l'anneau après l'ajout
-temp_node = bootstrap_node
-temp_node.display_ring()
+if nodes:
+    nodes[0].display_ring()
 
 # Suppression d'un nœud
 if len(nodes) > 2:
