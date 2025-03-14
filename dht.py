@@ -76,11 +76,12 @@ class Node:
         nodes = []
         current = start
         while True:
-            nodes.append(str(current.identifier))
+            nodes.append(f"[{current.identifier}]")  # Formatage des nœuds
             current = current.right
             if current == start:
                 break
-        print("DHT Ring: " + " -> ".join(nodes))
+        print("--->".join(nodes))  # Affichage avec '---->' entre les nœuds
+
 
 # Simulation
 env = simpy.Environment()
@@ -122,7 +123,7 @@ def connect_neighbors_after_removal(env, nodes, index):
             node_to_remove.connect_neighbors(left_neighbor, right_neighbor)
 
 # Initialisation
-for _ in range(2):
+for _ in range(5):
     env.process(add_node(env, nodes))
 
 env.run(until=10)
@@ -133,5 +134,9 @@ if nodes:
 
 env.run(until=15)
 
+# Affichage final de l'anneau après que tous les nœuds aient été ajoutés
+if nodes:
+    nodes[0].display_ring()
 
 env.run(until=20)
+
