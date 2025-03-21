@@ -158,7 +158,29 @@ class Node:
 
         return closest_node
 
+    def request_data(self, key):
+        print(f"[{self.env.now}] {self.identifier} demande la donnée pour la clé {key}.")
+        self.forward_data_request(key)
 
+    def forward_data_request(self, key):
+        current = self.right
+        while current != self:
+            if current.has_data(key):
+                current.deliver_data(key)
+                return
+            print(f"[{self.env.now}] {current.identifier} forward la demande de donnée pour la clé {key}.")
+            current = current.right
+        print(f"[{self.env.now}] Donnée pour la clé {key} introuvable dans l'anneau!")
+
+    def has_data(self, key):
+        return any(data.key == key for data in self.data_store)
+
+    def deliver_data(self, key):
+        for data in self.data_store:
+            if data.key == key:
+                print(f"[{self.env.now}] {self.identifier} a trouvé la donnée pour la clé {key}: {data.value}.")
+                return data.value
+        print(f"[{self.env.now}] {self.identifier} n'a pas trouvé la donnée pour la clé {key}.")
 
 # Simulation
 env = simpy.Environment()
@@ -208,6 +230,13 @@ def store_data(env, nodes):
         responsible_node = nodes[0].find_responsible_node(key)
         responsible_node.store_data(key, value)
 
+def get_data(env, nodes):
+    yield env.timeout(1)  # Attendre un peu avant de récupérer des données
+    if nodes:
+        requester = nodes[0]
+        key = random.randint(1, 100)  # Choisir une clé aléatoire
+        requester.request_data(key)
+
 # Fonction principale pour orchestrer les opérations
 def main(env):
     yield env.process(add_initial_nodes(env, nodes))
@@ -215,6 +244,8 @@ def main(env):
     yield env.process(send_message(env, nodes))
     print("")
     yield env.process(store_data(env, nodes))
+    print("")
+    yield env.process(get_data(env, nodes))  # Ajout de la récupération de données
 
 # Exécuter la simulation
 env.process(main(env))
