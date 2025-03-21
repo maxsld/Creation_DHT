@@ -81,11 +81,45 @@ class Node:
             Node.existing_ids.remove(self.identifier)
             return None
 
+        # Répliquer les données si le nœud à supprimer en contient
+        for data in self.data_store:
+            if self.is_central_node(data):
+                if self.left and self.left.left and not self.left.left.has_data(data.key):
+                    self.left.left.store_data(data.key, data.value)
+                    print(f"[{self.env.now}] Réplication de {data} sur {self.left.left.identifier}.")
+                if self.right and self.right.right and not self.right.right.has_data(data.key):
+                    self.right.right.store_data(data.key, data.value)
+                    print(f"[{self.env.now}] Réplication de {data} sur {self.right.right.identifier}.")
+            elif self.is_left_node(data):
+                if self.left and not self.left.has_data(data.key):
+                    self.left.store_data(data.key, data.value)
+                    print(f"[{self.env.now}] Réplication de {data} sur {self.left.identifier}.")
+            elif self.is_right_node(data):
+                if self.right and not self.right.has_data(data.key):
+                    self.right.store_data(data.key, data.value)
+                    print(f"[{self.env.now}] Réplication de {data} sur {self.right.identifier}.")
+
+        # Mettre à jour les pointeurs des voisins
         self.left.right = self.right
         self.right.left = self.left
         print(f"[{self.env.now}] Nœud {self.identifier} supprimé, {self.left.identifier} et {self.right.identifier} sont maintenant connectés.")
+        
         Node.existing_ids.remove(self.identifier)
         return self.right
+
+    def is_central_node(self, data):
+        # Vérifie si le nœud actuel et ses voisins ont la donnée
+        return (self.has_data(data.key) and 
+                (self.left.has_data(data.key) if self.left else False) and 
+                (self.right.has_data(data.key) if self.right else False))
+
+    def is_left_node(self, data):
+        # Vérifie si la donnée n'est pas présente sur le voisin gauche
+        return not (self.left and self.left.has_data(data.key))
+
+    def is_right_node(self, data):
+        # Vérifie si la donnée n'est pas présente sur le voisin droit
+        return not (self.right and self.right.has_data(data.key))
 
     def display_ring(self):
         current = self
@@ -127,15 +161,23 @@ class Node:
         print(f"[{self.env.now}] {self.identifier} a reçu le message: '{message.content}' de {message.sender.identifier}")
 
     def store_data(self, key, value):
+        # Vérifiez si la donnée existe déjà pour éviter la duplication
+        if self.has_data(key):
+            print(f"[{self.env.now}] {self.identifier} a déjà la donnée pour la clé {key}.")
+            return
+
         data = Donnees(key, value)
         responsible_node = self.find_responsible_node(key)
         responsible_node.data_store.append(data)
         print(f"[{self.env.now}] {responsible_node.identifier} stocke {data}.")
 
         # Stocker sur les voisins immédiats (degré de réplication == 3)
-        responsible_node.left.data_store.append(data)
-        responsible_node.right.data_store.append(data)
-        print(f"[{self.env.now}] {responsible_node.left.identifier} et {responsible_node.right.identifier} stockent également {data}.")
+        if not responsible_node.left.has_data(key):
+            responsible_node.left.data_store.append(data)
+            print(f"[{self.env.now}] {responsible_node.left.identifier} stocke également {data}.")
+        if not responsible_node.right.has_data(key):
+            responsible_node.right.data_store.append(data)
+            print(f"[{self.env.now}] {responsible_node.right.identifier} stocke également {data}.")
 
     def find_responsible_node(self, key):
         current = self
@@ -297,6 +339,8 @@ def main(env):
     yield env.process(store_data(env, nodes))
     print("")
     yield env.process(get_data(env, nodes))  # Ajout de la récupération de données
+    nodes[0].draw_ring()  # Dessiner l'anneau après les opérations
+    yield env.process(remove_node(env, nodes))
     nodes[0].draw_ring()  # Dessiner l'anneau après les opérations
 
 # Exécuter la simulation
