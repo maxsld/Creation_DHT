@@ -216,11 +216,19 @@ class Node:
         plt.grid(False)  # Désactiver la grille
         plt.axis('off')
 
-        # Annoter les nœuds
+        # Annoter les nœuds avec leur identifiant et leurs données
         for i, node in enumerate(nodes):
-            plt.annotate(f"{node.identifier}", (x[i], y[i]), textcoords="offset points", xytext=(0,10), ha='center')
+            # Récupérer les données du nœud
+            data_info = ", ".join([f"{data.key}: {data.value}" for data in node.data_store])
+            # Si le nœud a des données, les afficher
+            if data_info:
+                label = f"{node.identifier}\n({data_info})"
+            else:
+                label = f"{node.identifier}\n(Aucun Donnée)"
+            
+            plt.annotate(label, (x[i], y[i]), textcoords="offset points", xytext=(0,10), ha='center')
 
-        plt.title("Anneau des Nœuds")
+        plt.title("Anneau des Nœuds avec données")
         plt.show()
 
 # Simulation

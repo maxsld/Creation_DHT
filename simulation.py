@@ -60,6 +60,7 @@ def get_data(env, nodes):
 # Fonction principale pour orchestrer les opérations
 def main(env):
     yield env.process(add_initial_nodes(env, nodes))
+    nodes[0].draw_ring()
     yield env.process(remove_node(env, nodes))
     yield env.process(send_message(env, nodes))
     print("")
