@@ -1,6 +1,12 @@
 import simpy
 import random
 
+class Message:
+    def __init__(self, sender, receiver, content):
+        self.sender = sender
+        self.receiver = receiver
+        self.content = content
+
 class Node:
     existing_ids = set()
 
@@ -13,7 +19,6 @@ class Node:
         self.identifier = identifier
         self.left = self  # Initialement seul dans l'anneau
         self.right = self
-        self.neighbors = []  # Liste pour stocker les voisins avec lesquels échanger des messages
 
         self.env.process(self.run())
 
@@ -22,51 +27,49 @@ class Node:
 
     def run(self):
         while True:
-            yield self.env.timeout(1)  # Le nœud est en pause dans l'anneau
+            yield self.env.timeout(1)
 
-    def send_message(self, recipient, message):
-        print(f"[{self.env.now}] {self.identifier} envoie le message '{message}' à {recipient.identifier}")
-        recipient.receive_message(self, message)
+    def send_join_message(self, recipient):
+        message = Message(self, recipient, "nouveau nœud")
+        print(f"[{self.env.now}] {self.identifier} envoie le message '{message.content}' à {recipient.identifier}")
+        recipient.received_join_message(message)
 
-    def receive_message(self, sender, message):
-        print(f"[{self.env.now}] {self.identifier} a reçu le message '{message}' de {sender.identifier}")
-        if message == "nouveau nœud":
-            self.insert_new_node(sender)
+    def received_join_message(self, message):
+        print(f"[{self.env.now}] {self.identifier} a reçu le message '{message.content}' de {message.sender.identifier}")
+        if message.content == "nouveau nœud":
+            self.insert_node(message.sender)
 
-    def insert_new_node(self, new_node):
+    def insert_node(self, new_node):
         print(f"[{self.env.now}] Le nœud {self.identifier} reçoit le message 'nouveau nœud' et va l'insérer.")
-        position = self.find_position(new_node)
-        self.send_message(position, "nouveau nœud - insérer")
-        position.insert(new_node)
+        if self.right == self:
+            self.left = new_node
+            self.right = new_node
+            new_node.left = self
+            new_node.right = self
+        else:
+            position = self.find_position(new_node)
+            new_node.left = position
+            new_node.right = position.right
+            position.right.left = new_node
+            position.right = new_node
+        self.display_ring()
 
     def find_position(self, new_node):
         current = self
-        while not (current.identifier < new_node.identifier <= current.right.identifier or (current.right.identifier < current.identifier and (new_node.identifier > current.identifier or new_node.identifier < current.right.identifier))):
+        while not (current.identifier < new_node.identifier <= current.right.identifier or
+                   (current.right.identifier < current.identifier and
+                    (new_node.identifier > current.identifier or new_node.identifier < current.right.identifier))):
             current = current.right
             if current == self:
                 break
         return current
 
-    def insert(self, new_node):
-        position = self.find_position(new_node)
-        new_node.right = position.right
-        new_node.left = position
-        position.right.left = new_node
-        position.right = new_node
-        print(f"[{self.env.now}] Nœud {new_node.identifier} ajouté entre {position.identifier} et {new_node.right.identifier}")
-
-    def connect_neighbors(self, left_neighbor, right_neighbor):
-        self.left = left_neighbor
-        self.right = right_neighbor
-        left_neighbor.right = self
-        right_neighbor.left = self
-        print(f"[{self.env.now}] Nœud {self.identifier} connecté entre {left_neighbor.identifier} et {right_neighbor.identifier}")
-    
     def remove(self):
         if self.left == self and self.right == self:
             print(f"[{self.env.now}] Dernier nœud {self.identifier} supprimé, l'anneau est vide.")
+            Node.existing_ids.remove(self.identifier)
             return None
-        
+
         self.left.right = self.right
         self.right.left = self.left
         print(f"[{self.env.now}] Nœud {self.identifier} supprimé, {self.left.identifier} et {self.right.identifier} sont maintenant connectés.")
@@ -74,29 +77,54 @@ class Node:
         return self.right
 
     def display_ring(self):
+        # Trouver le nœud avec le plus petit identifiant
         current = self
-        smallest = self
+        min_node = self
         while True:
-            if current.identifier < smallest.identifier:
-                smallest = current
+            if current.identifier < min_node.identifier:
+                min_node = current
             current = current.right
             if current == self:
                 break
 
-        start = smallest
+        # Afficher les nœuds à partir du nœud avec le plus petit identifiant
+        current = min_node
         nodes = []
-        current = start
         while True:
-            nodes.append(f"[{current.identifier}]")  # Formatage des nœuds
+            nodes.append(f"[{current.identifier}]")
             current = current.right
-            if current == start:
+            if current == min_node:
                 break
+        print("")
         print("--->".join(nodes))
+        print("")
 
+    def send(self, target_id, content):
+        message = Message(self, target_id, content)
+        print(f"[{self.env.now}] {self.identifier} envoie '{content}' à {target_id}")
+        self.forward(message)
+
+    def forward(self, message):
+        current = self.right
+        while current != self:
+            if current.identifier == message.receiver:
+                current.deliver(message)
+                return
+            print(f"[{self.env.now}] {current.identifier} forward le message '{message.content}'")
+            current = current.right
+        print(f"[{self.env.now}] Message pour {message.receiver} introuvable dans l'anneau!")
+
+    def deliver(self, message):
+        print(f"[{self.env.now}] {self.identifier} a reçu le message: '{message.content}' de {message.sender.identifier}")
 
 # Simulation
 env = simpy.Environment()
 nodes = []
+
+# Ajout initial de nœuds
+def add_initial_nodes(env, nodes):
+    for _ in range(5):
+        yield env.process(add_node(env, nodes))
 
 def add_node(env, nodes):
     yield env.timeout(random.randint(1, 5))
@@ -104,55 +132,37 @@ def add_node(env, nodes):
         new_id = random.randint(1, 100)
         if new_id not in Node.existing_ids:
             break
-
     new_node = Node(env, new_id)
     if nodes:
-        # Choisir un nœud au hasard dans la liste existante pour que le nouveau nœud contacte
         random_node = random.choice(nodes)
         print(f"[{env.now}] Nouveau nœud {new_node.identifier} tente de rejoindre l'anneau.")
-        # Le nouveau nœud envoie un message pour rejoindre l'anneau
-        new_node.send_message(random_node, "nouveau nœud")
+        new_node.send_join_message(random_node)
     nodes.append(new_node)
     nodes.sort(key=lambda node: node.identifier)
 
-def remove_node(env, nodes, index):
-    yield env.timeout(random.randint(1, 5))
-    if len(nodes) > index:
+def remove_node(env, nodes):
+    yield env.timeout(1)  # Attendre un peu avant de supprimer un nœud
+    if nodes:
+        index = random.randint(0, len(nodes) - 1)
         node_to_remove = nodes[index]
         next_node = node_to_remove.remove()
         nodes.remove(node_to_remove)
         if next_node:
             next_node.display_ring()
 
-def connect_neighbors_after_removal(env, nodes, index):
-    yield env.timeout(random.randint(1, 5))
-    if len(nodes) > index:
-        node_to_remove = nodes[index]
-        if node_to_remove.left != node_to_remove and node_to_remove.right != node_to_remove:
-            left_neighbor = node_to_remove.left
-            right_neighbor = node_to_remove.right
-            node_to_remove.connect_neighbors(left_neighbor, right_neighbor)
+def send_message(env, nodes):
+    yield env.timeout(1)  # Attendre un peu avant d'envoyer un message
+    if nodes:
+        sender = nodes[0]
+        receiver = nodes[-1].identifier
+        sender.send(receiver, "Hello, this is a test message!")
 
-# Initialisation
-for _ in range(5):
-    env.process(add_node(env, nodes))
+# Fonction principale pour orchestrer les opérations
+def main(env):
+    yield env.process(add_initial_nodes(env, nodes))
+    yield env.process(remove_node(env, nodes))
+    yield env.process(send_message(env, nodes))
 
-env.run(until=10)
-
-if nodes:
-    nodes[0].display_ring()
-    env.process(add_node(env, nodes))
-
-env.run(until=15)
-
-if nodes:
-    nodes[0].display_ring()
-
-env.run(until=20)
-
-env.process(remove_node(env, nodes, 2))
-
-env.run(until=25)
-
-if nodes:
-    nodes[0].display_ring()
+# Exécuter la simulation
+env.process(main(env))
+env.run(until=30)
