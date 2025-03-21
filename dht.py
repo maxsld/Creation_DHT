@@ -7,6 +7,14 @@ class Message:
         self.receiver = receiver
         self.content = content
 
+class Donnees:
+    def __init__(self, key, value):
+        self.key = key
+        self.value = value
+
+    def __repr__(self):
+        return f"Données({self.key}: {self.value})"
+
 class Node:
     existing_ids = set()
 
