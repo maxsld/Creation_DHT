@@ -61,6 +61,17 @@ class Node:
         left_neighbor.right = self
         right_neighbor.left = self
         print(f"[{self.env.now}] Nœud {self.identifier} connecté entre {left_neighbor.identifier} et {right_neighbor.identifier}")
+    
+    def remove(self):
+        if self.left == self and self.right == self:
+            print(f"[{self.env.now}] Dernier nœud {self.identifier} supprimé, l'anneau est vide.")
+            return None
+        
+        self.left.right = self.right
+        self.right.left = self.left
+        print(f"[{self.env.now}] Nœud {self.identifier} supprimé, {self.left.identifier} et {self.right.identifier} sont maintenant connectés.")
+        Node.existing_ids.remove(self.identifier)
+        return self.right
 
     def display_ring(self):
         current = self
@@ -80,7 +91,7 @@ class Node:
             current = current.right
             if current == start:
                 break
-        print("--->".join(nodes))  # Affichage avec '---->' entre les nœuds
+        print("--->".join(nodes))
 
 
 # Simulation
@@ -134,9 +145,14 @@ if nodes:
 
 env.run(until=15)
 
-# Affichage final de l'anneau après que tous les nœuds aient été ajoutés
 if nodes:
     nodes[0].display_ring()
 
 env.run(until=20)
 
+env.process(remove_node(env, nodes, 2))
+
+env.run(until=25)
+
+if nodes:
+    nodes[0].display_ring()
