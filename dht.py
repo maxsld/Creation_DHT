@@ -1,5 +1,7 @@
 import simpy
 import random
+import matplotlib.pyplot as plt
+import numpy as np
 
 class Message:
     def __init__(self, sender, receiver, content):
@@ -182,6 +184,45 @@ class Node:
                 return data.value
         print(f"[{self.env.now}] {self.identifier} n'a pas trouvé la donnée pour la clé {key}.")
 
+    def draw_ring(self):
+        # Récupérer tous les nœuds dans l'anneau
+        nodes = []
+        current = self
+        while True:
+            nodes.append(current)
+            current = current.right
+            if current == self:
+                break
+
+        # Calculer les positions des nœuds sur un cercle
+        num_nodes = len(nodes)
+        angles = np.linspace(0, 2 * np.pi, num_nodes, endpoint=False)
+        angles = np.concatenate((angles, [angles[0]]))  # Fermer le cercle
+        radius = 1
+
+        # Positions des nœuds
+        x = radius * np.cos(angles)
+        y = radius * np.sin(angles)
+
+        # Créer le graphique
+        plt.figure(figsize=(6, 6))
+        plt.plot(x, y, 'o-', markersize=10)  # Nœuds
+        plt.xlim(-1.5, 1.5)
+        plt.ylim(-1.5, 1.5)
+        plt.gca().set_aspect('equal', adjustable='box')
+
+        # Modifier l'apparence de la figure (fond blanc sans lignes noires)
+        plt.gca().set_facecolor('white')
+        plt.grid(False)  # Désactiver la grille
+        plt.axis('off')
+
+        # Annoter les nœuds
+        for i, node in enumerate(nodes):
+            plt.annotate(f"{node.identifier}", (x[i], y[i]), textcoords="offset points", xytext=(0,10), ha='center')
+
+        plt.title("Anneau des Nœuds")
+        plt.show()
+
 # Simulation
 env = simpy.Environment()
 nodes = []
@@ -244,8 +285,11 @@ def main(env):
     yield env.process(send_message(env, nodes))
     print("")
     yield env.process(store_data(env, nodes))
+    yield env.process(store_data(env, nodes))
+    yield env.process(store_data(env, nodes))
     print("")
     yield env.process(get_data(env, nodes))  # Ajout de la récupération de données
+    nodes[0].draw_ring()  # Dessiner l'anneau après les opérations
 
 # Exécuter la simulation
 env.process(main(env))
