@@ -25,8 +25,9 @@ class Node:
 
         self.env = env
         self.identifier = identifier
-        self.left = self  # Initialement seul dans l'anneau
+        self.left = self
         self.right = self
+        self.data_store = []
 
         self.env.process(self.run())
 
@@ -85,7 +86,6 @@ class Node:
         return self.right
 
     def display_ring(self):
-        # Trouver le nœud avec le plus petit identifiant
         current = self
         min_node = self
         while True:
@@ -95,7 +95,6 @@ class Node:
             if current == self:
                 break
 
-        # Afficher les nœuds à partir du nœud avec le plus petit identifiant
         current = min_node
         nodes = []
         while True:
@@ -125,13 +124,49 @@ class Node:
     def deliver(self, message):
         print(f"[{self.env.now}] {self.identifier} a reçu le message: '{message.content}' de {message.sender.identifier}")
 
+    def store_data(self, key, value):
+        data = Donnees(key, value)
+        responsible_node = self.find_responsible_node(key)
+        responsible_node.data_store.append(data)
+        print(f"[{self.env.now}] {responsible_node.identifier} stocke {data}.")
+
+        # Stocker sur les voisins immédiats (degré de réplication == 3)
+        responsible_node.left.data_store.append(data)
+        responsible_node.right.data_store.append(data)
+        print(f"[{self.env.now}] {responsible_node.left.identifier} et {responsible_node.right.identifier} stockent également {data}.")
+
+    def find_responsible_node(self, key):
+        current = self
+        closest_node = current  # Initialisation du nœud le plus proche avec le nœud de départ
+        min_distance = abs(current.identifier - key)  # Distance initiale (directe)
+        
+        while True:
+            # Calcul de la distance directe entre le nœud actuel et la clé
+            direct_distance = abs(current.identifier - key)
+
+            # Si le nœud actuel est plus proche que le précédent, on met à jour
+            if direct_distance < min_distance:
+                closest_node = current
+                min_distance = direct_distance
+
+            # On passe au nœud suivant
+            current = current.right
+            
+            # Si on a parcouru tout l'anneau (on revient au nœud de départ)
+            if current == self:
+                break
+
+        return closest_node
+
+
+
 # Simulation
 env = simpy.Environment()
 nodes = []
 
 # Ajout initial de nœuds
 def add_initial_nodes(env, nodes):
-    for _ in range(5):
+    for _ in range(10):
         yield env.process(add_node(env, nodes))
 
 def add_node(env, nodes):
@@ -165,12 +200,22 @@ def send_message(env, nodes):
         receiver = nodes[-1].identifier
         sender.send(receiver, "Hello, this is a test message!")
 
+def store_data(env, nodes):
+    yield env.timeout(1)  # Attendre un peu avant de stocker des données
+    if nodes:
+        key = random.randint(1, 100)
+        value = f"Value for {key}"
+        responsible_node = nodes[0].find_responsible_node(key)
+        responsible_node.store_data(key, value)
+
 # Fonction principale pour orchestrer les opérations
 def main(env):
     yield env.process(add_initial_nodes(env, nodes))
     yield env.process(remove_node(env, nodes))
     yield env.process(send_message(env, nodes))
+    print("")
+    yield env.process(store_data(env, nodes))
 
 # Exécuter la simulation
 env.process(main(env))
-env.run(until=30)
+env.run(until=100)
