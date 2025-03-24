@@ -3,6 +3,12 @@ import random
 import matplotlib.pyplot as plt
 import numpy as np
 
+class Message:
+    def __init__(self, sender, receiver, content):
+        self.sender = sender
+        self.receiver = receiver
+        self.content = content
+
 class Node:
     def __init__(self, env, node_id):
         self.env = env
@@ -16,26 +22,26 @@ class Node:
         while True:
             yield self.env.timeout(random.uniform(1, 3))  # Attente aléatoire avant de recevoir le message
 
-    def receive_join_request(self, sender_id, origin_node):
+    def receive_join_request(self, message):
         """ Traite la demande d'ajout d'un nœud en transmettant le message. """
-        print(f"{self.env.now:.2f} 📩 Nœud {self.node_id} reçoit une demande d'ajout de {sender_id}")
+        print(f"{self.env.now:.2f} 📩 Nœud {self.node_id} reçoit une demande d'ajout de {message.sender}")
 
         # Si l'anneau est vide (le nœud est le seul), insérer immédiatement le nouveau nœud
         if self.right == self:
-            self.insert_new_node(sender_id, origin_node)
+            self.insert_new_node(message.sender)
         else:
-            if self.should_insert(sender_id):
-                self.insert_new_node(sender_id, origin_node)
+            if self.should_insert(message.sender):
+                self.insert_new_node(message.sender)
             else:
                 print(f"{self.env.now:.2f} ➡️ Nœud {self.node_id} transmet la requête à {self.right.node_id}")
-                self.right.receive_join_request(sender_id, origin_node)
+                self.right.receive_join_request(message)
 
     def should_insert(self, new_node_id):
         """ Vérifie si le nœud actuel est celui qui doit insérer le nouveau nœud. """
         return (self.node_id < new_node_id < self.right.node_id or
                 (self.node_id > self.right.node_id and (new_node_id > self.node_id or new_node_id < self.right.node_id)))
 
-    def insert_new_node(self, new_node_id, origin_node):
+    def insert_new_node(self, new_node_id):
         """ Insère le nouveau nœud dans l'anneau. """
         new_node = Node(self.env, new_node_id)
         new_node.left = self
@@ -44,14 +50,8 @@ class Node:
         self.right = new_node
         print(f"{self.env.now:.2f} ✅ Nœud {new_node.node_id} inséré entre {self.node_id} et {new_node.right.node_id}")
 
-        # Vérifier si le nouvel ID est le plus petit et doit devenir le premier
-        if new_node.node_id < origin_node.node_id:
-            return new_node
-        return origin_node
-
     def remove_node(self, node_to_remove):
         """ Permet de retirer un nœud de l'anneau. """
-        # Ajouter un délai pour que cette méthode fonctionne comme un générateur
         yield self.env.timeout(random.uniform(1, 2))  # Délai aléatoire pour simuler l'attente de traitement
 
         print(f"{self.env.now:.2f} ❌ Nœud {self.node_id} retire le nœud {node_to_remove.node_id}")
@@ -113,7 +113,8 @@ def add_nodes(env, first_node):
         delay = random.uniform(1, 2)
         yield env.timeout(delay)  # Ajout après un délai aléatoire
         print(f"{env.now:.2f} ➡️ Demande d'ajout de nœud {node_id} envoyée.")
-        first_node.receive_join_request(node_id, first_node)
+        message = Message(sender=node_id, receiver=first_node.node_id, content="Join Request")
+        first_node.receive_join_request(message)
 
 # Simulation
 env = simpy.Environment()
