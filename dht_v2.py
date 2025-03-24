@@ -34,7 +34,7 @@ class Node:
         """ Vérifie si le nœud actuel est celui qui doit insérer le nouveau nœud. """
         return (self.node_id < new_node_id < self.right.node_id or
                 (self.node_id > self.right.node_id and (new_node_id > self.node_id or new_node_id < self.right.node_id)))
-    
+
     def insert_new_node(self, new_node_id, origin_node):
         """ Insère le nouveau nœud dans l'anneau. """
         new_node = Node(self.env, new_node_id)
@@ -43,11 +43,28 @@ class Node:
         self.right.left = new_node
         self.right = new_node
         print(f"{self.env.now:.2f} ✅ Nœud {new_node.node_id} inséré entre {self.node_id} et {new_node.right.node_id}")
-        
+
         # Vérifier si le nouvel ID est le plus petit et doit devenir le premier
         if new_node.node_id < origin_node.node_id:
             return new_node
         return origin_node
+
+    def remove_node(self, node_to_remove):
+        """ Permet de retirer un nœud de l'anneau. """
+        # Ajouter un délai pour que cette méthode fonctionne comme un générateur
+        yield self.env.timeout(random.uniform(1, 2))  # Délai aléatoire pour simuler l'attente de traitement
+
+        print(f"{self.env.now:.2f} ❌ Nœud {self.node_id} retire le nœud {node_to_remove.node_id}")
+
+        # Si le nœud à retirer est celui-ci, on le supprime en ajustant les voisins
+        if self == node_to_remove:
+            self.left.right = self.right
+            self.right.left = self.left
+            print(f"{self.env.now:.2f} ✅ Nœud {self.node_id} supprimé de l'anneau.")
+        else:
+            # Si ce n'est pas le nœud actuel, on transmet la demande à son voisin droit
+            print(f"{self.env.now:.2f} ➡️ Nœud {self.node_id} transmet la demande de suppression à {self.right.node_id}")
+            yield from self.right.remove_node(node_to_remove)  # Appel récursif avec `yield from`
 
     def display_ring(self):
         """ Affiche l'anneau DHT avec matplotlib sous forme de cercle. """
@@ -58,7 +75,7 @@ class Node:
             current = current.right
             if current == self:
                 break
-        
+
         # On calcule les positions angulaires pour chaque noeud
         n = len(nodes)
         angles = np.linspace(0, 2 * np.pi, n, endpoint=False)  # Angles également espacés
@@ -77,8 +94,7 @@ class Node:
         for i, node in enumerate(nodes):
             x = radius * np.cos(angles[i])
             y = radius * np.sin(angles[i])
-            color = np.random.rand(3,)  # Couleur aléatoire pour chaque point
-            ax.plot(x, y, 'o', markersize=15, color=color)  # Augmenter la taille du marqueur
+            ax.plot(x, y, 'o', markersize=15, color="lightblue")  # Augmenter la taille du marqueur
             ax.text(x, y, f"{node.node_id}", fontsize=12, ha='center', va='center')
 
         # Afficher le cercle représentant l'anneau
@@ -103,13 +119,23 @@ def add_nodes(env, first_node):
 env = simpy.Environment()
 
 # Le premier nœud a un identifiant aléatoire et est la racine de l'anneau.
-first_node = Node(env, random.randint(1, 100))
+first_node = Node(env, 50)
 
 # Planifier l'ajout des nœuds progressivement
 env.process(add_nodes(env, first_node))
 
 # Exécuter la simulation pendant 20 unités de temps
-env.run(until=20)
+env.run(until=100)
 
 # Afficher l'anneau avec matplotlib une fois que la simulation est terminée
+first_node.display_ring()
+
+# Exemple de suppression d'un nœud après un délai
+node_to_remove = first_node.right  # Exemple, retirer le deuxième nœud
+env.process(first_node.remove_node(node_to_remove))
+
+# Exécuter la simulation après la suppression
+env.run(until=120)
+
+# Afficher l'anneau mis à jour
 first_node.display_ring()
