@@ -39,18 +39,53 @@ class Node:
             print(f"{self.env.now:.2f} ➡️ Nœud {self.node_id} transfère la clé {data.key} à {self.right.node_id}")
             yield self.env.timeout(random.uniform(1, 2))  # Simule le délai de transfert
             self.env.process(self.right.store_data(data))
+    
+    def retrieve_data(self, key):
+        """ Récupère ou transfère la demande de récupération de donnée jusqu'au bon nœud. """
+        print(f"{self.env.now:.2f} 🔍 Nœud {self.node_id} cherche la donnée avec la clé {key}")
+
+        # Vérifier si la donnée est dans le nœud actuel
+        for data in self.data_store:
+            if data.key == key:
+                print(f"{self.env.now:.2f} ✅ Nœud {self.node_id} a trouvé la donnée avec la clé {key}: {data.content}")
+                return data.content  # Retourne le contenu de la donnée
+
+        # Si la donnée n'est pas ici, la transmettre au voisin droit
+        print(f"{self.env.now:.2f} ➡️ Nœud {self.node_id} transmet la demande de récupération à {self.right.node_id}")
+        yield self.env.timeout(random.uniform(1, 2))  # Délai de transfert de la demande
+        self.env.process(self.right.retrieve_data(key))  # Recherche de la donnée sur le voisin droit
 
     def is_responsible_for(self, key):
         """ Détermine si ce nœud est responsable du stockage de la clé en prenant en compte la distance circulaire absolue. """
+
+        if self.node_id <= key <= self.right.node_id:
         
-        # Calcul de la distance absolue entre ce nœud et la clé
-        dist_self = min(abs(key - self.node_id), 100 - abs(key - self.node_id))
-        
-        # Calcul de la distance absolue entre le voisin droit et la clé
-        dist_right = min(abs(key - self.right.node_id), 100 - abs(key - self.right.node_id))
-        
-        # Ce nœud est responsable si la clé est plus proche de lui que de son voisin droit
-        return dist_self < dist_right
+            # Calcul de la distance absolue entre ce nœud et la clé
+            dist_self = min(abs(key - self.node_id), 100 - abs(key - self.node_id))
+            
+            # Calcul de la distance absolue entre le voisin droit et la clé
+            dist_right = min(abs(key - self.right.node_id), 100 - abs(key - self.right.node_id))
+            
+            # Ce nœud est responsable si la clé est plus proche de lui que de son voisin droit
+            return dist_self < dist_right
+        elif self.left.node_id <= key <= self.node_id:
+            # Calcul de la distance absolue entre ce nœud et la clé
+            dist_self = min(abs(key - self.node_id), 100 - abs(key - self.node_id))
+            
+            # Calcul de la distance absolue entre le voisin droit et la clé
+            dist_left = min(abs(key - self.left.node_id), 100 - abs(key - self.left.node_id))
+            
+            # Ce nœud est responsable si la clé est plus proche de lui que de son voisin droit
+            return dist_self < dist_left
+        elif self.node_id > self.right.node_id:
+            # Calcul de la distance absolue entre ce nœud et la clé
+            dist_self = min(abs(key - self.node_id), 100 - abs(key - self.node_id))
+            
+            # Calcul de la distance absolue entre le voisin droit et la clé
+            dist_right = min(abs(key - self.right.node_id), 100 - abs(key - self.right.node_id))
+            
+            # Ce nœud est responsable si la clé est plus proche de lui que de son voisin droit
+            return dist_self < dist_right
 
     def receive_message(self, message):
         """ Traite la réception d'un message et le transmet si nécessaire. """
@@ -211,9 +246,13 @@ env.process(send_sample_messages(env, first_node, first_node_receiver))
 
 env.run(until=200)
 
-env.process(first_node.store_data(Data(random.randint(1, 100), "Donnée :D")))
+env.process(first_node.store_data(Data(7, "Donnée :D")))
 
 env.run(until=250)
+
+env.process(first_node.retrieve_data(7))
+
+env.run(until=300)
 
 # Afficher l'anneau mis à jour
 first_node.display_ring()
