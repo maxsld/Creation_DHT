@@ -22,6 +22,38 @@ class Node:
         while True:
             yield self.env.timeout(random.uniform(1, 3))  # Attente aléatoire avant de recevoir le message
 
+    def receive_message(self, message):
+        """ Traite la réception d'un message et le transmet si nécessaire. """
+        print(f"{self.env.now:.2f} 📩 Nœud {self.node_id} reçoit le message de {message.sender} : {message.content}")
+
+        # Si le message est destiné à ce nœud, on l'affiche, sinon on le transmet.
+        if self.node_id == message.receiver:
+            print(f"{self.env.now:.2f} ✅ Nœud {self.node_id} a reçu le message.")
+        else:
+            # Le message n'est pas pour ce nœud, donc le transmettre.
+            print(f"{self.env.now:.2f} ➡️ Nœud {self.node_id} transmet le message à {self.right.node_id}")
+            yield self.env.timeout(random.uniform(1, 2))  # Délai de transmission du message
+            self.right.receive_message(message)  # Transfert du message à son voisin droit
+
+    def send_message(self, sender, receiver, content):
+        """ Envoie un message à un autre nœud du réseau, et chaque nœud le transmet. """
+        print(f"{self.env.now:.2f} ➡️ Nœud {sender.node_id} veut envoyer un message à {receiver.node_id} : {content}")
+        message = Message(sender=sender.node_id, receiver=receiver.node_id, content=content)
+        # Commencer à transférer le message à partir du nœud sender
+        self.env.process(self.transfer_message(sender, message))
+
+    def transfer_message(self, sender, message):
+        """ Transfert le message à travers les nœuds de l'anneau. """
+        current_node = sender
+        while current_node.node_id != message.receiver:
+            print(f"{self.env.now:.2f} ➡️ Nœud {current_node.node_id} transmet le message à {current_node.right.node_id}")
+            yield self.env.timeout(random.uniform(1, 2))  # Temps de transfert
+            current_node = current_node.right  # Transfert au voisin droit
+        # Lorsque le message atteint le destinataire, le récepteur prend en charge.
+        current_node.receive_message(message)
+        # Ajouter un message final lorsque le récepteur reçoit le message
+        print(f"{self.env.now:.2f} ✅ Nœud {current_node.node_id} a reçu le message de {message.sender} : {message.content}")
+
     def receive_join_request(self, message):
         """ Traite la demande d'ajout d'un nœud en transmettant le message. """
         print(f"{self.env.now:.2f} 📩 Nœud {self.node_id} reçoit une demande d'ajout de {message.sender}")
@@ -116,6 +148,11 @@ def add_nodes(env, first_node):
         message = Message(sender=node_id, receiver=first_node.node_id, content="Join Request")
         first_node.receive_join_request(message)
 
+def send_sample_messages(env, first_node, first_node_receiver):
+    """ Envoie des messages à travers l'anneau après un certain délai. """
+    yield env.timeout(10)  # Attendre un certain temps avant d'envoyer le message
+    first_node.send_message(first_node, first_node_receiver, content="Bonjour 1")  # Exemple d'envoi
+
 # Simulation
 env = simpy.Environment()
 
@@ -137,6 +174,12 @@ env.process(first_node.remove_node(node_to_remove))
 
 # Exécuter la simulation après la suppression
 env.run(until=120)
+
+# Planifier l'envoi de messages
+first_node_receiver = first_node.right.right.right.right.right.right  # Receveur du message
+env.process(send_sample_messages(env, first_node, first_node_receiver))
+
+env.run(until=140)
 
 # Afficher l'anneau mis à jour
 first_node.display_ring()
