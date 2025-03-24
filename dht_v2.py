@@ -3,6 +3,11 @@ import random
 import matplotlib.pyplot as plt
 import numpy as np
 
+class Data:
+    def __init__(self, key, content):
+        self.key = key
+        self.content = content
+
 class Message:
     def __init__(self, sender, receiver, content):
         self.sender = sender
@@ -15,12 +20,37 @@ class Node:
         self.node_id = node_id
         self.left = self  # Voisin gauche (initialement lui-même)
         self.right = self  # Voisin droit (initialement lui-même)
+        self.data_store = []
         self.env.process(self.listen())
 
     def listen(self):
         """ Simule l'écoute des messages entrants. """
         while True:
             yield self.env.timeout(random.uniform(1, 3))  # Attente aléatoire avant de recevoir le message
+    
+    def store_data(self, data):
+        """ Stocke ou transfère la donnée jusqu'au bon nœud """
+        print(f"{self.env.now:.2f} 📦 Nœud {self.node_id} reçoit la demande de stockage de la clé {data.key}")
+
+        if self.is_responsible_for(data.key):
+            self.data_store.append(data)
+            print(f"{self.env.now:.2f} ✅ Nœud {self.node_id} stocke la clé {data.key} : {data.content}")
+        else:
+            print(f"{self.env.now:.2f} ➡️ Nœud {self.node_id} transfère la clé {data.key} à {self.right.node_id}")
+            yield self.env.timeout(random.uniform(1, 2))  # Simule le délai de transfert
+            self.env.process(self.right.store_data(data))
+
+    def is_responsible_for(self, key):
+        """ Détermine si ce nœud est responsable du stockage de la clé en prenant en compte la distance circulaire absolue. """
+        
+        # Calcul de la distance absolue entre ce nœud et la clé
+        dist_self = min(abs(key - self.node_id), 100 - abs(key - self.node_id))
+        
+        # Calcul de la distance absolue entre le voisin droit et la clé
+        dist_right = min(abs(key - self.right.node_id), 100 - abs(key - self.right.node_id))
+        
+        # Ce nœud est responsable si la clé est plus proche de lui que de son voisin droit
+        return dist_self < dist_right
 
     def receive_message(self, message):
         """ Traite la réception d'un message et le transmet si nécessaire. """
@@ -173,13 +203,17 @@ node_to_remove = first_node.right  # Exemple, retirer le deuxième nœud
 env.process(first_node.remove_node(node_to_remove))
 
 # Exécuter la simulation après la suppression
-env.run(until=120)
+env.run(until=150)
 
 # Planifier l'envoi de messages
 first_node_receiver = first_node.right.right.right.right.right.right  # Receveur du message
 env.process(send_sample_messages(env, first_node, first_node_receiver))
 
-env.run(until=140)
+env.run(until=200)
+
+env.process(first_node.store_data(Data(random.randint(1, 100), "Donnée :D")))
+
+env.run(until=250)
 
 # Afficher l'anneau mis à jour
 first_node.display_ring()
