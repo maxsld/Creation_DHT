@@ -3,6 +3,10 @@ import random
 import matplotlib.pyplot as plt
 import numpy as np
 
+# -------------------------------
+# Classes de base
+# -------------------------------
+
 class Data:
     def __init__(self, key, content):
         self.key = key
@@ -13,6 +17,10 @@ class Message:
         self.sender = sender
         self.receiver = receiver
         self.content = content
+
+# -------------------------------
+# Classe Node
+# -------------------------------
 
 class Node:
     def __init__(self, env, node_id):
@@ -61,33 +69,25 @@ class Node:
 
     def is_responsible_for(self, key):
         """ Détermine si ce nœud est responsable du stockage de la clé en prenant en compte la distance circulaire absolue. """
-
         if self.node_id <= key <= self.right.node_id:
-        
             # Calcul de la distance absolue entre ce nœud et la clé
             dist_self = min(abs(key - self.node_id), 100 - abs(key - self.node_id))
-            
             # Calcul de la distance absolue entre le voisin droit et la clé
             dist_right = min(abs(key - self.right.node_id), 100 - abs(key - self.right.node_id))
-            
             # Ce nœud est responsable si la clé est plus proche de lui que de son voisin droit
             return dist_self < dist_right
         elif self.left.node_id <= key <= self.node_id:
             # Calcul de la distance absolue entre ce nœud et la clé
             dist_self = min(abs(key - self.node_id), 100 - abs(key - self.node_id))
-            
-            # Calcul de la distance absolue entre le voisin droit et la clé
+            # Calcul de la distance absolue entre le voisin gauche et la clé
             dist_left = min(abs(key - self.left.node_id), 100 - abs(key - self.left.node_id))
-            
-            # Ce nœud est responsable si la clé est plus proche de lui que de son voisin droit
+            # Ce nœud est responsable si la clé est plus proche de lui que de son voisin gauche
             return dist_self < dist_left
         elif self.node_id > self.right.node_id:
             # Calcul de la distance absolue entre ce nœud et la clé
             dist_self = min(abs(key - self.node_id), 100 - abs(key - self.node_id))
-            
             # Calcul de la distance absolue entre le voisin droit et la clé
             dist_right = min(abs(key - self.right.node_id), 100 - abs(key - self.right.node_id))
-            
             # Ce nœud est responsable si la clé est plus proche de lui que de son voisin droit
             return dist_self < dist_right
 
@@ -218,6 +218,10 @@ class Node:
         plt.title("Structure de l'anneau DHT avec données", fontsize=14, fontweight='bold')
         plt.show()
 
+# -------------------------------
+# Fonctions de simulation
+# -------------------------------
+
 def add_nodes(env, first_node):
     """ Fonction pour ajouter des nœuds progressivement après le lancement de la simulation. """
     node_ids = sorted(random.sample(range(1, 100), 20))  # Générer des noeuds aléatoires
@@ -234,7 +238,10 @@ def send_sample_messages(env, first_node, first_node_receiver):
     yield env.timeout(10)  # Attendre un certain temps avant d'envoyer le message
     first_node.send_message(first_node, first_node_receiver, content="Bonjour 1")  # Exemple d'envoi
 
+# -------------------------------
 # Simulation
+# -------------------------------
+
 env = simpy.Environment()
 
 # Le premier nœud a un identifiant aléatoire et est la racine de l'anneau.
@@ -262,12 +269,14 @@ env.process(send_sample_messages(env, first_node, first_node_receiver))
 
 env.run(until=200)
 
+# Stocker des données
 env.process(first_node.store_data(Data(7, "Donnée :D")))
 env.process(first_node.store_data(Data(25, "Donnée 2 :D")))
 env.process(first_node.store_data(Data(79, "Donnée 3 :D")))
 
 env.run(until=250)
 
+# Récupérer des données
 env.process(first_node.retrieve_data(7))
 
 env.run(until=300)
