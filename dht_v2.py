@@ -34,7 +34,11 @@ class Node:
 
         if self.is_responsible_for(data.key):
             self.data_store.append(data)
+            self.left.data_store.append(data)
+            self.right.data_store.append(data)
             print(f"{self.env.now:.2f} ✅ Nœud {self.node_id} stocke la clé {data.key} : {data.content}")
+            print(f"{self.left.env.now:.2f} ✅ Nœud {self.left.node_id} stocke la clé {data.key} : {data.content}")
+            print(f"{self.right.env.now:.2f} ✅ Nœud {self.right.node_id} stocke la clé {data.key} : {data.content}")
         else:
             print(f"{self.env.now:.2f} ➡️ Nœud {self.node_id} transfère la clé {data.key} à {self.right.node_id}")
             yield self.env.timeout(random.uniform(1, 2))  # Simule le délai de transfert
@@ -164,43 +168,55 @@ class Node:
             yield from self.right.remove_node(node_to_remove)  # Appel récursif avec `yield from`
 
     def display_ring(self):
-        """ Affiche l'anneau DHT avec matplotlib sous forme de cercle. """
+        """ Affiche l'anneau DHT avec les données stockées sous chaque nœud """
         nodes = []
-        current = self
+        current = first_node
         while True:
             nodes.append(current)
             current = current.right
-            if current == self:
+            if current == first_node:
                 break
 
-        # On calcule les positions angulaires pour chaque noeud
         n = len(nodes)
-        angles = np.linspace(0, 2 * np.pi, n, endpoint=False)  # Angles également espacés
-        radius = 1  # Rayon du cercle
+        angles = np.linspace(0, 2 * np.pi, n, endpoint=False)
+        radius = 1
 
-        # Création de la figure
-        fig, ax = plt.subplots(figsize=(6, 6))
-        ax.set_aspect('equal')  # Pour un cercle parfait
+        fig, ax = plt.subplots(figsize=(8, 8))
+        ax.set_aspect('equal')
         ax.set_xlim(-1.5, 1.5)
         ax.set_ylim(-1.5, 1.5)
-
-        # Désactiver les axes et la grille
         ax.set_axis_off()
 
-        # Tracer les nœuds comme des points plus gros et avec des couleurs aléatoires
         for i, node in enumerate(nodes):
             x = radius * np.cos(angles[i])
             y = radius * np.sin(angles[i])
-            ax.plot(x, y, 'o', markersize=15, color="lightblue")  # Augmenter la taille du marqueur
-            ax.text(x, y, f"{node.node_id}", fontsize=12, ha='center', va='center')
+            
+            # Dessiner le noeud
+            ax.plot(x, y, 'o', markersize=15, color="lightblue", markeredgecolor='black')
 
-        # Afficher le cercle représentant l'anneau
+            # Afficher l'ID du nœud
+            ax.text(x, y, f"{node.node_id}", fontsize=12, ha='center', va='center', fontweight='bold')
+
+            # Afficher les données stockées sous chaque nœud
+            if node.data_store:
+                data_text = "\n".join([str(data.key) for data in node.data_store])
+
+                # Ajuster la position pour éviter le chevauchement
+                offset_x, offset_y = 0.1 * np.cos(angles[i]), 0.1 * np.sin(angles[i])
+                
+                # Ajouter un rectangle blanc derrière le texte
+                ax.text(
+                    x + offset_x, y + offset_y - 0.2, data_text,
+                    fontsize=10, ha='center', va='top', color='black',
+                    bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.3')
+                )
+
+        # Dessiner l'anneau
         circle = plt.Circle((0, 0), radius, color='b', fill=False, linewidth=2)
         ax.add_artist(circle)
-
-        plt.title("Structure de l'anneau DHT")
+        
+        plt.title("Structure de l'anneau DHT avec données", fontsize=14, fontweight='bold')
         plt.show()
-
 
 def add_nodes(env, first_node):
     """ Fonction pour ajouter des nœuds progressivement après le lancement de la simulation. """
@@ -247,6 +263,8 @@ env.process(send_sample_messages(env, first_node, first_node_receiver))
 env.run(until=200)
 
 env.process(first_node.store_data(Data(7, "Donnée :D")))
+env.process(first_node.store_data(Data(25, "Donnée 2 :D")))
+env.process(first_node.store_data(Data(79, "Donnée 3 :D")))
 
 env.run(until=250)
 
